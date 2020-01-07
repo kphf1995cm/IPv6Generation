@@ -3,6 +3,7 @@
 import base64
 import rsa
 from rsa import common
+import random
 
 
 # 使用 rsa库进行RSA签名和加解密
@@ -18,16 +19,16 @@ class RsaUtil(object):
         self.create_keys()
         with open('public.pem', 'rb') as publickfile:
             pub = publickfile.read()
-        self.company_public_key = rsa.PublicKey.load_pkcs1(pub)
+        self.public_key = rsa.PublicKey.load_pkcs1(pub)
 
         with open('private.pem', 'rb') as privatefile:
             pri = privatefile.read()
-        self.company_private_key = rsa.PrivateKey.load_pkcs1(pri)
+        self.private_key = rsa.PrivateKey.load_pkcs1(pri)
 
         #if pub_file:
-        #    self.company_public_key = rsa.PublicKey.load_pkcs1_openssl_pem(open(pub_file).read())
+        #    self.public_key = rsa.PublicKey.load_pkcs1_openssl_pem(open(pub_file).read())
         #if pri_file:
-        #    self.company_private_key = rsa.PrivateKey.load_pkcs1(open(pri_file).read())
+        #    self.private_key = rsa.PrivateKey.load_pkcs1(open(pri_file).read())
     
     # 生成公钥和私钥
     def create_keys(self):  
@@ -54,22 +55,23 @@ class RsaUtil(object):
         maxlength = blocksize - reserve_size
         return maxlength
 
-    # 加密 支付方公钥
+    # 公钥加密
     def encrypt_by_public_key(self, message):
         """使用公钥加密.
             :param message: 需要加密的内容.
             加密之后需要对接过进行base64转码
         """
         encrypt_result = b''
-        max_length = self.get_max_length(self.company_public_key)
+        max_length = self.get_max_length(self.public_key)
         while message:
             input = message[:max_length]
             message = message[max_length:]
-            out = rsa.encrypt(input, self.company_public_key)
+            out = rsa.encrypt(input, self.public_key)
             encrypt_result += out
         encrypt_result = base64.b64encode(encrypt_result)
         return encrypt_result
 
+    # 私钥解密
     def decrypt_by_private_key(self, message):
         """使用私钥解密.
             :param message: 需要加密的内容.
@@ -77,15 +79,16 @@ class RsaUtil(object):
         """
         decrypt_result = b""
 
-        max_length = self.get_max_length(self.company_private_key, False)
+        max_length = self.get_max_length(self.private_key, False)
         decrypt_message = base64.b64decode(message)
         while decrypt_message:
             input = decrypt_message[:max_length]
             decrypt_message = decrypt_message[max_length:]
-            out = rsa.decrypt(input, self.company_private_key)
+            out = rsa.decrypt(input, self.private_key)
             decrypt_result += out
         return decrypt_result
 
+    # 私钥签名
     # 签名 商户私钥 base64转码
     def sign_by_private_key(self, data):
         """私钥签名.
@@ -93,31 +96,79 @@ class RsaUtil(object):
             使用SHA-1 方法进行签名（也可以使用MD5）
             签名之后，需要转义后输出
         """
-        signature = rsa.sign(str(data), priv_key=self.company_private_key, hash_method='SHA-1')
+        signature = rsa.sign(str(data), priv_key=self.private_key, hash_method='SHA-1')
         return base64.b64encode(signature)
 
+    # 公钥验证
     def verify_by_public_key(self, message, signature):
         """公钥验签.
             :param message: 验签的内容.
             :param signature: 对验签内容签名的值（签名之后，会进行b64encode转码，所以验签前也需转码）.
         """
         signature = base64.b64decode(signature)
-        return rsa.verify(message, signature, self.company_public_key)
+        return rsa.verify(message, signature, self.public_key)
 
+def test():
+    message = 'hell world'
+    print("plain text: >>>")
+    print(message)
+    rsaUtil = RsaUtil()
+    encrypy_result = rsaUtil.encrypt_by_public_key(message)
+    print("encrypt result: >>>")
+    print(encrypy_result)
+    decrypt_result = rsaUtil.decrypt_by_private_key(encrypy_result)
+    print("decrypt result: >>>")
+    print(decrypt_result)
+    sign = rsaUtil.sign_by_private_key(message)
+    print("sign result: >>>")
+    print(sign)
+    print("verify result: >>>")
+    print(rsaUtil.verify_by_public_key(message, sign))
 
-message = 'hell world'
-print("plain text: >>>")
-print(message)
+SignToIPv6 = {}
+IPv6ToSign = {}
 rsaUtil = RsaUtil()
-encrypy_result = rsaUtil.encrypt_by_public_key(message)
-print("encrypt result: >>>")
-print(encrypy_result)
-decrypt_result = rsaUtil.decrypt_by_private_key(encrypy_result)
-print("decrypt result: >>>")
-print(decrypt_result)
-sign = rsaUtil.sign_by_private_key(message)
-print("sign result: >>>")
-print(sign)
-print("verify result: >>>")
-print(rsaUtil.verify_by_public_key(message, sign))
 
+def interface_identifier_generation():
+    randomPool = '0123456789abcdef'
+    interfaceIdentifier = ''
+    for i in range(16):
+        interfaceIdentifier += random.choice(randomPool)
+    return interfaceIdentifier
+
+
+def map_sign_to_ipv6(prefix,sign):
+    if SignToIPv6.has_key(sign) == False:
+        ipv6 = prefix + interface_identifier_generation()
+        SignToIPv6[sign] = ipv6
+        IPv6ToSign[ipv6] = sign
+        return ipv6
+    else:
+        return SignToIPv6[sign]
+    
+# 64 bits prefix, 40 bits nid, 24 bits timestamp
+# 16 nibbles prefix, 10 nibbles nid, 6 nibbles timestamp
+def ipv6_generation(prefix,nid,timestamp):
+    message = nid + timestamp
+    sign = rsaUtil.sign_by_private_key(message)
+    #print "sign:", sign
+    ipv6 = map_sign_to_ipv6(prefix,sign)
+    #print "ipv6:", ipv6
+    return ipv6
+
+if __name__ == "__main__":
+    # test()
+    prefix = "2402000000000000"
+    nid = "2020214611"
+    timestamps = ["071351","071352","071353","071354","071355"] 
+    print "*******time change*******"
+    for timestamp in timestamps:
+        ipv6 = ipv6_generation(prefix,nid,timestamp)
+        print nid,timestamp,ipv6
+
+    print "********nid change*******"
+    nids = ["2020214611","2020214612","2020214613","2020214614","2020214615"]
+    timestamp = "071351"
+    for nid in nids:
+        ipv6 = ipv6_generation(prefix,nid,timestamp)
+        print nid,timestamp,ipv6
