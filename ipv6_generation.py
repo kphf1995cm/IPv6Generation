@@ -146,10 +146,10 @@ def map_sign_to_ipv6(prefix,sign):
     else:
         return SignToIPv6[sign]
     
-# 64 bits prefix, 40 bits nid, 24 bits timestamp
-# 16 nibbles prefix, 10 nibbles nid, 6 nibbles timestamp
-def ipv6_generation(prefix,nid,timestamp):
-    message = nid + timestamp
+# 64 bits prefix, 40 bits hid, 24 bits timestamp
+# 16 nibbles prefix, 10 nibbles hid, 6 nibbles timestamp
+def ipv6_generation(prefix,hid,timestamp):
+    message = hid + timestamp
     sign = rsaUtil.sign_by_private_key(message)
     #print "sign:", sign
     ipv6 = map_sign_to_ipv6(prefix,sign)
@@ -166,7 +166,7 @@ if __name__ == "__main__":
         ipv6 = ipv6_generation(prefix,nid,timestamp)
         print nid,timestamp,ipv6
 
-    print "********nid change*******"
+    print "********hid change*******"
     nids = ["2020214611","2020214612","2020214613","2020214614","2020214615"]
     timestamp = "071351"
     for nid in nids:
